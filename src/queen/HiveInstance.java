@@ -5,6 +5,8 @@ import static ox.util.Utils.normalize;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeleteTagsRequest;
 import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.InstanceStateName;
+import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.Tag;
 
 import ox.Json;
@@ -24,7 +26,19 @@ public class HiveInstance {
   }
 
   public boolean isTerminated() {
-    return instance.getState().getName().equals("terminated");
+    return getState() == InstanceStateName.Terminated;
+  }
+
+  public boolean isRunning() {
+    return getState() == InstanceStateName.Running;
+  }
+
+  public InstanceStateName getState() {
+    return InstanceStateName.fromValue(instance.getState().getName());
+  }
+
+  public InstanceType getType() {
+    return InstanceType.fromValue(instance.getInstanceType());
   }
 
   public HiveInstance withTag(String key, Object value) {
@@ -55,6 +69,15 @@ public class HiveInstance {
 
   public String getTag(String key) {
     return normalize(getTags().get(key));
+  }
+
+  public String getName() {
+    return getTag("Name");
+  }
+
+  @Override
+  public String toString() {
+    return getId();
   }
 
 }
