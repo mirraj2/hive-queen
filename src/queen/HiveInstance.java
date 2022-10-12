@@ -77,7 +77,8 @@ public class HiveInstance {
 
   @Override
   public String toString() {
-    return getId();
+    String name = getName();
+    return name.isEmpty() ? getId() : name;
   }
 
 }
