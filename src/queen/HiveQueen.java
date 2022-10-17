@@ -2,6 +2,7 @@ package queen;
 
 import static com.google.common.base.Preconditions.checkState;
 import static ox.util.Utils.checkNotEmpty;
+import static ox.util.Utils.f;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
 
@@ -157,6 +158,8 @@ public class HiveQueen {
   }
 
   public void createDNSRecord(String key, String value, boolean awaitDNSPropagation) {
+    Log.debug(f("Creating dns record: {0}={1}", key, value));
+
     HostedZone zone = getHostedZoneByName(getDomain(key));
 
     ChangeBatch change = new ChangeBatch();
@@ -181,6 +184,8 @@ public class HiveQueen {
   }
 
   public void deleteDNSRecord(String key) {
+    Log.debug(f("Deleting dns record: {0}", key));
+
     HostedZone zone = getHostedZoneByName(getDomain(key));
     
     ListResourceRecordSetsRequest listRequest = new ListResourceRecordSetsRequest(zone.getId())

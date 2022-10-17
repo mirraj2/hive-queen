@@ -25,6 +25,10 @@ public class HiveInstance {
     return instance.getInstanceId();
   }
 
+  public String getIp() {
+    return instance.getPublicIpAddress();
+  }
+
   public boolean isTerminated() {
     return getState() == InstanceStateName.Terminated;
   }
