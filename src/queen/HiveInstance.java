@@ -44,10 +44,7 @@ public class HiveInstance {
   public HiveInstance withTag(String key, Object value) {
     String s = value == null ? "" : normalize(value.toString());
     if (s.isEmpty()) {
-      queen.getEC2()
-          .deleteTags(new DeleteTagsRequest()
-              .withResources(instance.getInstanceId())
-              .withTags(new Tag(key)));
+      removeTag(key);
     } else {
       Tag tag = new Tag(key, s);
       queen.getEC2()
@@ -56,6 +53,15 @@ public class HiveInstance {
               .withTags(tag));
       instance.withTags(tag);
     }
+    return this;
+  }
+
+  public HiveInstance removeTag(String key) {
+    queen.getEC2()
+        .deleteTags(new DeleteTagsRequest()
+            .withResources(instance.getInstanceId())
+            .withTags(new Tag(key)));
+
     return this;
   }
 

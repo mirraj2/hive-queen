@@ -1,5 +1,6 @@
 package queen;
 
+import static com.google.common.base.Preconditions.checkState;
 import static ox.util.Utils.checkNotEmpty;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
@@ -22,6 +23,22 @@ import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
+import com.amazonaws.services.route53.AmazonRoute53;
+import com.amazonaws.services.route53.AmazonRoute53ClientBuilder;
+import com.amazonaws.services.route53.model.Change;
+import com.amazonaws.services.route53.model.ChangeAction;
+import com.amazonaws.services.route53.model.ChangeBatch;
+import com.amazonaws.services.route53.model.ChangeResourceRecordSetsRequest;
+import com.amazonaws.services.route53.model.ChangeResourceRecordSetsResult;
+import com.amazonaws.services.route53.model.ChangeStatus;
+import com.amazonaws.services.route53.model.GetChangeRequest;
+import com.amazonaws.services.route53.model.HostedZone;
+import com.amazonaws.services.route53.model.ListHostedZonesRequest;
+import com.amazonaws.services.route53.model.ListResourceRecordSetsRequest;
+import com.amazonaws.services.route53.model.RRType;
+import com.amazonaws.services.route53.model.ResourceRecord;
+import com.amazonaws.services.route53.model.ResourceRecordSet;
+import com.google.common.base.Splitter;
 
 import ox.Config;
 import ox.Log;
@@ -31,6 +48,7 @@ import ox.x.XOptional;
 public class HiveQueen {
 
   private final AmazonEC2 ec2;
+  private final AmazonRoute53 route53;
 
   public HiveQueen(Config config) {
     this(config.get("hivequeen.key"), config.get("hivequeen.secret"));
@@ -38,7 +56,9 @@ public class HiveQueen {
 
   public HiveQueen(String key, String secret) {
     AWSCredentialsProvider provider = new AWSStaticCredentialsProvider(new BasicAWSCredentials(key, secret));
+
     ec2 = AmazonEC2ClientBuilder.standard().withCredentials(provider).withRegion(Regions.US_EAST_2).build();
+    route53 = AmazonRoute53ClientBuilder.standard().withCredentials(provider).withRegion(Regions.US_EAST_2).build();
   }
 
   public HiveInstance getInstance(String instanceId) {
@@ -79,7 +99,8 @@ public class HiveQueen {
     return ret;
   }
 
-  private HiveInstance cloneInternal(HiveInstance existingInstance, boolean reboot, boolean useExistingImageIfAvailable) {
+  private HiveInstance cloneInternal(HiveInstance existingInstance, boolean reboot,
+      boolean useExistingImageIfAvailable) {
     String cloneName = existingInstance.getName() + " (Cloned)";
 
     if (useExistingImageIfAvailable) {
@@ -135,6 +156,65 @@ public class HiveQueen {
     return XList.create(images).map(HiveImage::new).only();
   }
 
+  public void createDNSRecord(String key, String value, boolean awaitDNSPropagation) {
+    HostedZone zone = getHostedZoneByName(getDomain(key));
+
+    ChangeBatch change = new ChangeBatch();
+    change.withChanges(new Change(ChangeAction.UPSERT,
+        new ResourceRecordSet(key, RRType.A)
+            .withResourceRecords(new ResourceRecord(value))
+            .withTTL(Duration.ofMinutes(5).getSeconds())));
+
+    ChangeResourceRecordSetsResult result = route53.changeResourceRecordSets(new ChangeResourceRecordSetsRequest()
+        .withHostedZoneId(zone.getId())
+        .withChangeBatch(change));
+
+    if (awaitDNSPropagation) {
+      final String changeId = result.getChangeInfo().getId();
+      Await.every(Duration.ofSeconds(5)).timeout(Duration.ofMinutes(20)).verbose("createDNSRecord").await(() -> {
+        ChangeStatus status = ChangeStatus
+            .valueOf(route53.getChange(new GetChangeRequest(changeId)).getChangeInfo().getStatus());
+        return status == ChangeStatus.INSYNC;
+      });
+      Log.debug("Record confirmed.");
+    }
+  }
+
+  public void deleteDNSRecord(String key) {
+    HostedZone zone = getHostedZoneByName(getDomain(key));
+    
+    ListResourceRecordSetsRequest listRequest = new ListResourceRecordSetsRequest(zone.getId())
+        .withStartRecordName(key).withStartRecordType(RRType.A).withMaxItems("1");
+    ResourceRecordSet record = XList.create(route53.listResourceRecordSets(listRequest)
+        .getResourceRecordSets()).only().get();
+    checkState(normalizeDomain(record.getName()).equals(key),
+        "Could not find record: " + key + " -- first record was: " + record.getName());
+
+    route53.changeResourceRecordSets(new ChangeResourceRecordSetsRequest()
+        .withHostedZoneId(zone.getId())
+        .withChangeBatch(new ChangeBatch()
+            .withChanges(new Change(ChangeAction.DELETE, record))));
+  }
+
+  private String getDomain(String key) {
+    List<String> m = Splitter.on('.').splitToList(key);
+    return m.get(m.size() - 2) + "." + m.get(m.size() - 1);
+  }
+
+  private HostedZone getHostedZoneByName(String name) {
+    return XList.create(route53.listHostedZones(new ListHostedZonesRequest()).getHostedZones())
+        .filter(z -> {
+          return normalizeDomain(z.getName()).equals(name);
+        }).only().get();
+  }
+
+  private String normalizeDomain(String domain) {
+    if (domain.endsWith(".")) {
+      return domain.substring(0, domain.length() - 1);
+    }
+    return domain;
+  }
+
   protected AmazonEC2 getEC2() {
     return ec2;
   }
@@ -142,9 +222,16 @@ public class HiveQueen {
   public static void main(String[] args) {
     HiveQueen queen = new HiveQueen(Config.load("ender"));
 
-    queen.cloneInstance("i-08da31479155e2dbe", false, true, true);
+    // queen.createDNSRecord("jasontest.ender.com", "192.168.0.55", true);
+    // queen.deleteDNSRecord("jasontest.ender.com");
+
+    // queen.cloneInstance("i-08da31479155e2dbe", false, true, true);
     // HiveInstance newInstance = queen.launchInstanceFromAMI(InstanceType.T3Micro, "ami-09dd4b5b94e8f714a");
     // Log.debug(newInstance.getState());
+
+    // queen.getInstances().forEach(instance -> {
+    // instance.removeTag("buildType");
+    // });
   }
 
 }

@@ -13,6 +13,7 @@
 	<classpathentry kind="lib" path="lib/aws/jackson-core-2.6.6.jar"/>
 	<classpathentry kind="lib" path="lib/aws/jackson-databind-2.6.6.jar"/>
 	<classpathentry kind="lib" path="lib/aws/joda-time-2.8.1.jar"/>
+	<classpathentry kind="lib" path="lib/aws/aws-java-sdk-route53-1.12.321.jar" sourcepath="lib/open-src/aws-java-sdk-route53-1.12.321-sources.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/ox"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
