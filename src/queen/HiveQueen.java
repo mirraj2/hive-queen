@@ -107,7 +107,7 @@ public class HiveQueen {
     if (useExistingImageIfAvailable) {
       XOptional<HiveImage> existingImage = getImageByName(existingInstance.getId());
       if (existingImage.isPresent()) {
-        return launchInstanceFromImage(cloneName, existingInstance.getType(), existingImage.get().getId());
+        return launchInstanceFromImage(cloneName, existingInstance.getType(), existingImage.get().getId(), false);
       }
     }
 
@@ -124,10 +124,10 @@ public class HiveQueen {
         .verbose("Image Creation")
         .await(() -> getImage(imageId).isAvailable());
 
-    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId);
+    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId, false);
   }
 
-  public HiveInstance launchInstanceFromImage(String instanceName, InstanceType type, String imageId) {
+  public HiveInstance launchInstanceFromImage(String instanceName, InstanceType type, String imageId, boolean awaitIp) {
     imageId = checkNotEmpty(normalize(imageId));
 
     Log.debug("Launching instance.");
@@ -142,7 +142,15 @@ public class HiveQueen {
 
     ret.withTag("Name", instanceName);
 
-    return ret;
+    if (awaitIp) {
+      Await.every(Duration.ofSeconds(2))
+          .timeout(Duration.ofMinutes(20))
+          .verbose("Instance IP")
+          .await(() -> !getInstance(ret.getId()).getIp().isEmpty());
+      return getInstance(ret.getId());
+    } else {
+      return ret;
+    }
   }
 
   public HiveImage getImage(String imageId) {
@@ -158,6 +166,9 @@ public class HiveQueen {
   }
 
   public void createDNSRecord(String key, String value, boolean awaitDNSPropagation) {
+    key = checkNotEmpty(normalize(key), "Missing DNS key");
+    value = checkNotEmpty(normalize(value), "Missing DNS value");
+
     Log.debug(f("Creating dns record: {0}={1}", key, value));
 
     HostedZone zone = getHostedZoneByName(getDomain(key));

@@ -26,7 +26,7 @@ public class HiveInstance {
   }
 
   public String getIp() {
-    return instance.getPublicIpAddress();
+    return normalize(instance.getPublicIpAddress());
   }
 
   public boolean isTerminated() {
