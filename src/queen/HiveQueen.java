@@ -5,6 +5,7 @@ import static ox.util.Utils.checkNotEmpty;
 import static ox.util.Utils.f;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
+import static ox.util.Utils.sleep;
 
 import java.time.Duration;
 import java.util.List;
@@ -64,6 +65,10 @@ public class HiveQueen {
 
   public HiveInstance getInstance(String instanceId) {
     return getInstances(new DescribeInstancesRequest().withInstanceIds(instanceId)).only().get();
+  }
+
+  public HiveInstance getInstanceByName(String instanceName) {
+    return getInstances().filter(i -> i.getName().equals(instanceName)).only().get();
   }
 
   public XList<HiveInstance> getInstances() {
@@ -143,6 +148,10 @@ public class HiveQueen {
     ret.withTag("Name", instanceName);
 
     if (awaitIp) {
+      // TODO can sometimes run into "The instance ID 'i-xyz' does not exist"
+      // for now we'll add a hacky sleep
+      sleep(2000);
+
       Await.every(Duration.ofSeconds(2))
           .timeout(Duration.ofMinutes(20))
           .verbose("Instance IP")
@@ -198,7 +207,7 @@ public class HiveQueen {
     Log.debug(f("Deleting dns record: {0}", key));
 
     HostedZone zone = getHostedZoneByName(getDomain(key));
-    
+
     ListResourceRecordSetsRequest listRequest = new ListResourceRecordSetsRequest(zone.getId())
         .withStartRecordName(key).withStartRecordType(RRType.A).withMaxItems("1");
     ResourceRecordSet record = XList.create(route53.listResourceRecordSets(listRequest)
@@ -245,9 +254,19 @@ public class HiveQueen {
     // HiveInstance newInstance = queen.launchInstanceFromAMI(InstanceType.T3Micro, "ami-09dd4b5b94e8f714a");
     // Log.debug(newInstance.getState());
 
-    // queen.getInstances().forEach(instance -> {
-    // instance.removeTag("buildType");
+    // queen.getInstances().forEach(i -> {
+    // if (i.getTag("environment").equals("QA")) {
+    // Log.debug(i);
+    // i.withTag("environment", "SANDBOX");
+    // }
     // });
+
+    // queen.getInstances().forEach(instance -> {
+    // instance.removeTag("priority");
+    // });
+
+    // queen.getInstanceByName("dev.ender.com").withTag("environment", "PRODUCTION");
+    queen.getInstanceByName("demo.ender.com").withTag("function", "COMBO_SERVER");
   }
 
 }
