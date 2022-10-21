@@ -255,9 +255,8 @@ public class HiveQueen {
     // Log.debug(newInstance.getState());
 
     // queen.getInstances().forEach(i -> {
-    // if (i.getTag("environment").equals("QA")) {
-    // Log.debug(i);
-    // i.withTag("environment", "SANDBOX");
+    // if (i.getTag("environment").equals("PRODUCTION")) {
+    // i.removeTag("deployGroup");
     // }
     // });
 
@@ -265,8 +264,10 @@ public class HiveQueen {
     // instance.removeTag("priority");
     // });
 
-    // queen.getInstanceByName("dev.ender.com").withTag("environment", "PRODUCTION");
-    queen.getInstanceByName("demo.ender.com").withTag("function", "COMBO_SERVER");
+    queen.getInstanceByName("ender.com").withTag("deployGroup", "main");
+    queen.getInstanceByName("api.ender.com").withTag("deployGroup", "main");
+    queen.getInstanceByName("cron.ender.com").withTag("deployGroup", "main");
+    queen.getInstanceByName("chat.ender.com").withTag("deployGroup", "main");
   }
 
 }
