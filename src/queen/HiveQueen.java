@@ -2,7 +2,7 @@ package queen;
 
 import static com.google.common.base.Preconditions.checkState;
 import static ox.util.Utils.checkNotEmpty;
-import static ox.util.Utils.f;
+import static ox.util.Utils.format;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
 import static ox.util.Utils.sleep;
@@ -178,7 +178,7 @@ public class HiveQueen {
     key = checkNotEmpty(normalize(key), "Missing DNS key");
     value = checkNotEmpty(normalize(value), "Missing DNS value");
 
-    Log.debug(f("Creating dns record: {0}={1}", key, value));
+    Log.debug(format("Creating dns record: {0}={1}", key, value));
 
     HostedZone zone = getHostedZoneByName(getDomain(key));
 
@@ -204,7 +204,7 @@ public class HiveQueen {
   }
 
   public void deleteDNSRecord(String key) {
-    Log.debug(f("Deleting dns record: {0}", key));
+    Log.debug(format("Deleting dns record: {0}", key));
 
     HostedZone zone = getHostedZoneByName(getDomain(key));
 
