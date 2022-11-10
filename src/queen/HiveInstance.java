@@ -2,14 +2,20 @@ package queen;
 
 import static ox.util.Utils.normalize;
 
+import java.time.Duration;
+
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeleteTagsRequest;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceStateName;
 import com.amazonaws.services.ec2.model.InstanceType;
+import com.amazonaws.services.ec2.model.ModifyInstanceAttributeRequest;
+import com.amazonaws.services.ec2.model.StartInstancesRequest;
+import com.amazonaws.services.ec2.model.StopInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 
 import ox.Json;
+import ox.x.XList;
 
 public class HiveInstance {
 
@@ -35,6 +41,21 @@ public class HiveInstance {
 
   public boolean isRunning() {
     return getState() == InstanceStateName.Running;
+  }
+
+  public boolean isStopped() {
+    return getState() == InstanceStateName.Stopped;
+  }
+
+  public void changeInstanceType(InstanceType type) {
+    queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())));
+    Await.every(Duration.ofSeconds(2)).timeout(Duration.ofMinutes(5))
+        .await(() -> queen.getInstance(getId()).isStopped());
+    queen.getEC2().modifyInstanceAttribute(
+        new ModifyInstanceAttributeRequest()
+            .withInstanceId(getId())
+            .withInstanceType(type.toString()));
+    queen.getEC2().startInstances(new StartInstancesRequest(XList.of(getId())));
   }
 
   public InstanceStateName getState() {

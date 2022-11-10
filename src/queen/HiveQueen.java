@@ -247,6 +247,10 @@ public class HiveQueen {
   public static void main(String[] args) {
     HiveQueen queen = new HiveQueen(Config.load("ender"));
 
+    // queen.getInstanceByName("cron.ender.com").changeInstanceType(InstanceType.T4gMedium);
+
+    queen.createDNSRecord("cron.ender.com", queen.getInstanceByName("cron.ender.com").getIp(), false);
+
     // queen.createDNSRecord("jasontest.ender.com", "192.168.0.55", true);
     // queen.deleteDNSRecord("jasontest.ender.com");
 
@@ -264,10 +268,10 @@ public class HiveQueen {
     // instance.removeTag("priority");
     // });
 
-    queen.getInstanceByName("ender.com").withTag("deployGroup", "main");
-    queen.getInstanceByName("api.ender.com").withTag("deployGroup", "main");
-    queen.getInstanceByName("cron.ender.com").withTag("deployGroup", "main");
-    queen.getInstanceByName("chat.ender.com").withTag("deployGroup", "main");
+    // queen.getInstanceByName("ender.com").withTag("deployGroup", "main");
+    // queen.getInstanceByName("api.ender.com").withTag("deployGroup", "main");
+    // queen.getInstanceByName("cron.ender.com").withTag("deployGroup", "main");
+    // queen.getInstanceByName("chat.ender.com").withTag("deployGroup", "main");
   }
 
 }
