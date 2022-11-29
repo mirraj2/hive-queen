@@ -20,11 +20,32 @@ import com.amazonaws.services.ec2.model.CreateImageRequest;
 import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.DescribeImagesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.DescribeSubnetsRequest;
+import com.amazonaws.services.ec2.model.DescribeVpcsRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
+import com.amazonaws.services.ec2.model.Subnet;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
+import com.amazonaws.services.elasticloadbalancingv2.model.Action;
+import com.amazonaws.services.elasticloadbalancingv2.model.ActionTypeEnum;
+import com.amazonaws.services.elasticloadbalancingv2.model.Certificate;
+import com.amazonaws.services.elasticloadbalancingv2.model.CreateListenerRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.CreateLoadBalancerRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.ForwardActionConfig;
+import com.amazonaws.services.elasticloadbalancingv2.model.IpAddressType;
+import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancer;
+import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancerSchemeEnum;
+import com.amazonaws.services.elasticloadbalancingv2.model.ProtocolEnum;
+import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroupTuple;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetTypeEnum;
 import com.amazonaws.services.route53.AmazonRoute53;
 import com.amazonaws.services.route53.AmazonRoute53ClientBuilder;
 import com.amazonaws.services.route53.model.Change;
@@ -40,10 +61,12 @@ import com.amazonaws.services.route53.model.ListResourceRecordSetsRequest;
 import com.amazonaws.services.route53.model.RRType;
 import com.amazonaws.services.route53.model.ResourceRecord;
 import com.amazonaws.services.route53.model.ResourceRecordSet;
+import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
 
 import ox.Config;
 import ox.Log;
+import ox.util.Matchers;
 import ox.x.XList;
 import ox.x.XOptional;
 
@@ -51,6 +74,7 @@ public class HiveQueen {
 
   private final AmazonEC2 ec2;
   private final AmazonRoute53 route53;
+  private final AmazonElasticLoadBalancing loadBalancing;
 
   public HiveQueen(Config config) {
     this(config.get("hivequeen.key"), config.get("hivequeen.secret"));
@@ -61,10 +85,17 @@ public class HiveQueen {
 
     ec2 = AmazonEC2ClientBuilder.standard().withCredentials(provider).withRegion(Regions.US_EAST_2).build();
     route53 = AmazonRoute53ClientBuilder.standard().withCredentials(provider).withRegion(Regions.US_EAST_2).build();
+
+    loadBalancing = AmazonElasticLoadBalancingClientBuilder.standard().withCredentials(provider)
+        .withRegion(Regions.US_EAST_2).build();
   }
 
   public HiveInstance getInstance(String instanceId) {
-    return getInstances(new DescribeInstancesRequest().withInstanceIds(instanceId)).only().get();
+    return getInstanceOptional(instanceId).get();
+  }
+
+  public XOptional<HiveInstance> getInstanceOptional(String instanceId) {
+    return getInstances(new DescribeInstancesRequest().withInstanceIds(instanceId)).only();
   }
 
   public HiveInstance getInstanceByName(String instanceName) {
@@ -155,7 +186,10 @@ public class HiveQueen {
       Await.every(Duration.ofSeconds(2))
           .timeout(Duration.ofMinutes(20))
           .verbose("Instance IP")
-          .await(() -> !getInstance(ret.getId()).getIp().isEmpty());
+          .await(() -> {
+            return getInstanceOptional(ret.getId())
+                .compute(instance -> !instance.getIp().isEmpty(), false);
+          });
       return getInstance(ret.getId());
     } else {
       return ret;
@@ -182,9 +216,11 @@ public class HiveQueen {
 
     HostedZone zone = getHostedZoneByName(getDomain(key));
 
+    boolean isIP = Matchers.javaDigit().or(CharMatcher.is('.')).matchesAllOf(value);
+
     ChangeBatch change = new ChangeBatch();
     change.withChanges(new Change(ChangeAction.UPSERT,
-        new ResourceRecordSet(key, RRType.A)
+        new ResourceRecordSet(key, isIP ? RRType.A : RRType.CNAME)
             .withResourceRecords(new ResourceRecord(value))
             .withTTL(Duration.ofMinutes(5).getSeconds())));
 
@@ -240,16 +276,93 @@ public class HiveQueen {
     return domain;
   }
 
+  public void createTargetGroup(String name, String vpcId, String healthCheckPath) {
+    loadBalancing.createTargetGroup(new CreateTargetGroupRequest()
+        .withTargetType(TargetTypeEnum.Instance)
+        .withName(name)
+        .withVpcId(vpcId)
+        .withProtocol(ProtocolEnum.HTTPS)
+        .withPort(443)
+        .withHealthCheckEnabled(true)
+        .withHealthCheckProtocol(ProtocolEnum.HTTPS)
+        .withHealthCheckPath(healthCheckPath));
+  }
+
+  public void createLoadBalancer(String name, String vpcId) {
+    XList<Subnet> subnets = getSubnets(vpcId);
+
+    loadBalancing.createLoadBalancer(new CreateLoadBalancerRequest()
+        .withName(name)
+        .withScheme(LoadBalancerSchemeEnum.InternetFacing)
+        .withIpAddressType(IpAddressType.Dualstack)
+        .withSubnets(subnets.map(s -> s.getSubnetId())));
+  }
+
+  public void addLoadBalancerListener(String loadBalancerId, String targetGroupId, String certificateId) {
+    loadBalancing.createListener(new CreateListenerRequest()
+        .withLoadBalancerArn(loadBalancerId)
+        .withProtocol(ProtocolEnum.HTTPS)
+        .withPort(443)
+        .withDefaultActions(new Action()
+            .withType(ActionTypeEnum.Forward)
+            .withForwardConfig(new ForwardActionConfig()
+                .withTargetGroups(new TargetGroupTuple()
+                    .withTargetGroupArn(targetGroupId)
+                    .withWeight(1))))
+        .withCertificates(new Certificate()
+            .withCertificateArn(certificateId)));
+  }
+
+  public void registerTargets(String targetGroupId, XList<String> instanceIds) {
+    loadBalancing.registerTargets(new RegisterTargetsRequest()
+        .withTargetGroupArn(targetGroupId)
+        .withTargets(instanceIds.map(instanceId -> new TargetDescription().withId(instanceId).withPort(443))));
+  }
+
+  public HiveVPC getVPC(String name) {
+    return XList.create(ec2.describeVpcs(new DescribeVpcsRequest()).getVpcs())
+        .map(HiveVPC::new)
+        .filter(vpc -> vpc.getName().equals(name))
+        .only().get();
+  }
+
+  public XList<Subnet> getSubnets(String vpcId) {
+    return XList.create(ec2.describeSubnets(new DescribeSubnetsRequest()).getSubnets())
+        .filter(s -> s.getVpcId().equals(vpcId));
+  }
+
+  public XList<LoadBalancer> getLoadBalancers() {
+    return XList.create(loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest()).getLoadBalancers());
+  }
+
   protected AmazonEC2 getEC2() {
     return ec2;
   }
 
   public static void main(String[] args) {
-    HiveQueen queen = new HiveQueen(Config.load("ender"));
+    Config config = Config.load("ender");
+    HiveQueen queen = new HiveQueen(config);
+
+    // String vpcId = queen.getVPC("Ender Default VPC").getId();
+
+    // queen.createTargetGroup("web-server", queen.getVPC("Ender Default VPC").getId(),
+    // "/serverStatus?password=" + config.get("server.status.pw"));
+
+    // queen.foo();
+    // queen.createLoadBalancer("web-server", vpcId);
+    // queen.addLoadBalancerListener(
+    // "arn:aws:elasticloadbalancing:us-east-2:646212457017:loadbalancer/app/web-server/5b782801ebb1a79c",
+    // "arn:aws:elasticloadbalancing:us-east-2:646212457017:targetgroup/web-server/872a431a6aca6c9f",
+    // "arn:aws:acm:us-east-2:646212457017:certificate/06d6b931-e319-4ee1-8bc6-82242bd1d82a");
+
+    // queen.registerTargets("arn:aws:elasticloadbalancing:us-east-2:646212457017:targetgroup/web-server/872a431a6aca6c9f",
+    // XList.of("i-044c2030d5656dad2", "i-0f6eefec7220bcc3a"));
+
+    // queen.createDNSRecord("jasontest.ender.com", "web-server-1562555251.us-east-2.elb.amazonaws.com", true);
 
     // queen.getInstanceByName("cron.ender.com").changeInstanceType(InstanceType.T4gMedium);
 
-    queen.createDNSRecord("cron.ender.com", queen.getInstanceByName("cron.ender.com").getIp(), false);
+    // queen.createDNSRecord("qa13.ender.com", queen.getInstanceByName("qa13.ender.com").getIp(), false);
 
     // queen.createDNSRecord("jasontest.ender.com", "192.168.0.55", true);
     // queen.deleteDNSRecord("jasontest.ender.com");
@@ -272,6 +385,8 @@ public class HiveQueen {
     // queen.getInstanceByName("api.ender.com").withTag("deployGroup", "main");
     // queen.getInstanceByName("cron.ender.com").withTag("deployGroup", "main");
     // queen.getInstanceByName("chat.ender.com").withTag("deployGroup", "main");
+
+    Log.debug("Done.");
   }
 
 }
