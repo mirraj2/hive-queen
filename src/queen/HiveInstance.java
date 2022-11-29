@@ -47,6 +47,13 @@ public class HiveInstance {
     return getState() == InstanceStateName.Stopped;
   }
 
+  public void awaitRunning() {
+    Await.every(Duration.ofSeconds(1))
+        .timeout(Duration.ofMinutes(10))
+        .verbose("Instance Running")
+        .await(() -> queen.getInstance(getId()).isRunning());
+  }
+
   public void changeInstanceType(InstanceType type) {
     queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())));
     Await.every(Duration.ofSeconds(2)).timeout(Duration.ofMinutes(5))

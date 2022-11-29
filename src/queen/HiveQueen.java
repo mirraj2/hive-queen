@@ -35,7 +35,9 @@ import com.amazonaws.services.elasticloadbalancingv2.model.ActionTypeEnum;
 import com.amazonaws.services.elasticloadbalancingv2.model.Certificate;
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateListenerRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateLoadBalancerRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.CreateLoadBalancerResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.ForwardActionConfig;
 import com.amazonaws.services.elasticloadbalancingv2.model.IpAddressType;
@@ -208,7 +210,16 @@ public class HiveQueen {
     return XList.create(images).map(HiveImage::new).only();
   }
 
+  public void createARecord(String key, String value, boolean awaitDNSPropagation) {
+    createDNSRecord(key, value, awaitDNSPropagation, RRType.A);
+  }
+
   public void createDNSRecord(String key, String value, boolean awaitDNSPropagation) {
+    boolean isIP = Matchers.javaDigit().or(CharMatcher.is('.')).matchesAllOf(value);
+    createDNSRecord(key, value, awaitDNSPropagation, isIP ? RRType.A : RRType.CNAME);
+  }
+
+  private void createDNSRecord(String key, String value, boolean awaitDNSPropagation, RRType type) {
     key = checkNotEmpty(normalize(key), "Missing DNS key");
     value = checkNotEmpty(normalize(value), "Missing DNS value");
 
@@ -216,11 +227,9 @@ public class HiveQueen {
 
     HostedZone zone = getHostedZoneByName(getDomain(key));
 
-    boolean isIP = Matchers.javaDigit().or(CharMatcher.is('.')).matchesAllOf(value);
-
     ChangeBatch change = new ChangeBatch();
     change.withChanges(new Change(ChangeAction.UPSERT,
-        new ResourceRecordSet(key, isIP ? RRType.A : RRType.CNAME)
+        new ResourceRecordSet(key, type)
             .withResourceRecords(new ResourceRecord(value))
             .withTTL(Duration.ofMinutes(5).getSeconds())));
 
@@ -276,8 +285,8 @@ public class HiveQueen {
     return domain;
   }
 
-  public void createTargetGroup(String name, String vpcId, String healthCheckPath) {
-    loadBalancing.createTargetGroup(new CreateTargetGroupRequest()
+  public String createTargetGroup(String name, String vpcId, String healthCheckPath) {
+    CreateTargetGroupResult result = loadBalancing.createTargetGroup(new CreateTargetGroupRequest()
         .withTargetType(TargetTypeEnum.Instance)
         .withName(name)
         .withVpcId(vpcId)
@@ -286,16 +295,24 @@ public class HiveQueen {
         .withHealthCheckEnabled(true)
         .withHealthCheckProtocol(ProtocolEnum.HTTPS)
         .withHealthCheckPath(healthCheckPath));
+
+    return only(result.getTargetGroups()).getTargetGroupArn();
   }
 
-  public void createLoadBalancer(String name, String vpcId) {
+  public LoadBalancer createLoadBalancer(String name, String vpcId) {
     XList<Subnet> subnets = getSubnets(vpcId);
 
-    loadBalancing.createLoadBalancer(new CreateLoadBalancerRequest()
+    CreateLoadBalancerResult result = loadBalancing.createLoadBalancer(new CreateLoadBalancerRequest()
         .withName(name)
         .withScheme(LoadBalancerSchemeEnum.InternetFacing)
         .withIpAddressType(IpAddressType.Dualstack)
         .withSubnets(subnets.map(s -> s.getSubnetId())));
+
+    LoadBalancer ret = only(result.getLoadBalancers());
+
+    checkState(!ret.getDNSName().isEmpty());
+
+    return ret;
   }
 
   public void addLoadBalancerListener(String loadBalancerId, String targetGroupId, String certificateId) {
