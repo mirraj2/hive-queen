@@ -66,6 +66,7 @@ import com.amazonaws.services.route53.model.ResourceRecordSet;
 import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
 
+import ox.Await;
 import ox.Config;
 import ox.Log;
 import ox.util.Matchers;
@@ -359,6 +360,8 @@ public class HiveQueen {
   public static void main(String[] args) {
     Config config = Config.load("ender");
     HiveQueen queen = new HiveQueen(config);
+
+    queen.getInstances().filter(i -> i.getName().contains("node")).forEach(i -> i.withTag("branch", "production"));
 
     // String vpcId = queen.getVPC("Ender Default VPC").getId();
 
