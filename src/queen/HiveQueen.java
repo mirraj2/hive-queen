@@ -2,6 +2,7 @@ package queen;
 
 import static com.google.common.base.Preconditions.checkState;
 import static ox.util.Utils.checkNotEmpty;
+import static ox.util.Utils.count;
 import static ox.util.Utils.format;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
@@ -44,6 +45,8 @@ import com.amazonaws.services.elasticloadbalancingv2.model.IpAddressType;
 import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancer;
 import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancerSchemeEnum;
 import com.amazonaws.services.elasticloadbalancingv2.model.ProtocolEnum;
+import com.amazonaws.services.elasticloadbalancingv2.model.RedirectActionConfig;
+import com.amazonaws.services.elasticloadbalancingv2.model.RedirectActionStatusCodeEnum;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroupTuple;
@@ -186,13 +189,7 @@ public class HiveQueen {
       // for now we'll add a hacky sleep
       sleep(2000);
 
-      Await.every(Duration.ofSeconds(2))
-          .timeout(Duration.ofMinutes(20))
-          .verbose("Instance IP")
-          .await(() -> {
-            return getInstanceOptional(ret.getId())
-                .compute(instance -> !instance.getIp().isEmpty(), false);
-          });
+      ret.awaitIp();
       return getInstance(ret.getId());
     } else {
       return ret;
@@ -329,6 +326,17 @@ public class HiveQueen {
                     .withWeight(1))))
         .withCertificates(new Certificate()
             .withCertificateArn(certificateId)));
+
+    loadBalancing.createListener(new CreateListenerRequest()
+        .withLoadBalancerArn(loadBalancerId)
+        .withProtocol(ProtocolEnum.HTTP)
+        .withPort(80)
+        .withDefaultActions(new Action()
+            .withType(ActionTypeEnum.Redirect)
+            .withRedirectConfig(new RedirectActionConfig()
+                .withProtocol("HTTPS")
+                .withPort("443")
+                .withStatusCode(RedirectActionStatusCodeEnum.HTTP_301))));
   }
 
   public void registerTargets(String targetGroupId, XList<String> instanceIds) {
@@ -361,50 +369,12 @@ public class HiveQueen {
     Config config = Config.load("ender");
     HiveQueen queen = new HiveQueen(config);
 
-    queen.getInstances().filter(i -> i.getName().contains("node")).forEach(i -> i.withTag("branch", "production"));
+    // queen.getInstanceByName("qa5.ender.com").reboot();
 
-    // String vpcId = queen.getVPC("Ender Default VPC").getId();
-
-    // queen.createTargetGroup("web-server", queen.getVPC("Ender Default VPC").getId(),
-    // "/serverStatus?password=" + config.get("server.status.pw"));
-
-    // queen.foo();
-    // queen.createLoadBalancer("web-server", vpcId);
-    // queen.addLoadBalancerListener(
-    // "arn:aws:elasticloadbalancing:us-east-2:646212457017:loadbalancer/app/web-server/5b782801ebb1a79c",
-    // "arn:aws:elasticloadbalancing:us-east-2:646212457017:targetgroup/web-server/872a431a6aca6c9f",
-    // "arn:aws:acm:us-east-2:646212457017:certificate/06d6b931-e319-4ee1-8bc6-82242bd1d82a");
-
-    // queen.registerTargets("arn:aws:elasticloadbalancing:us-east-2:646212457017:targetgroup/web-server/872a431a6aca6c9f",
-    // XList.of("i-044c2030d5656dad2", "i-0f6eefec7220bcc3a"));
-
-    // queen.createDNSRecord("jasontest.ender.com", "web-server-1562555251.us-east-2.elb.amazonaws.com", true);
-
-    // queen.getInstanceByName("cron.ender.com").changeInstanceType(InstanceType.T4gMedium);
-
-    // queen.createDNSRecord("qa13.ender.com", queen.getInstanceByName("qa13.ender.com").getIp(), false);
-
-    // queen.createDNSRecord("jasontest.ender.com", "192.168.0.55", true);
-    // queen.deleteDNSRecord("jasontest.ender.com");
-
-    // queen.cloneInstance("i-08da31479155e2dbe", false, true, true);
-    // HiveInstance newInstance = queen.launchInstanceFromAMI(InstanceType.T3Micro, "ami-09dd4b5b94e8f714a");
-    // Log.debug(newInstance.getState());
-
-    // queen.getInstances().forEach(i -> {
-    // if (i.getTag("environment").equals("PRODUCTION")) {
-    // i.removeTag("deployGroup");
-    // }
-    // });
-
-    // queen.getInstances().forEach(instance -> {
-    // instance.removeTag("priority");
-    // });
-
-    // queen.getInstanceByName("ender.com").withTag("deployGroup", "main");
-    // queen.getInstanceByName("api.ender.com").withTag("deployGroup", "main");
-    // queen.getInstanceByName("cron.ender.com").withTag("deployGroup", "main");
-    // queen.getInstanceByName("chat.ender.com").withTag("deployGroup", "main");
+    count(1, 20).concurrent().forEach(i -> {
+      String domain = "qa" + i + ".ender.com";
+      queen.createDNSRecord(domain, queen.getInstanceByName(domain).getIp(), true);
+    });
 
     Log.debug("Done.");
   }

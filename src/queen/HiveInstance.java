@@ -10,11 +10,13 @@ import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceStateName;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.ModifyInstanceAttributeRequest;
+import com.amazonaws.services.ec2.model.RebootInstancesRequest;
 import com.amazonaws.services.ec2.model.StartInstancesRequest;
 import com.amazonaws.services.ec2.model.StopInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 
 import ox.Await;
+import ox.Await.AwaitTimeoutException;
 import ox.Json;
 import ox.x.XList;
 
@@ -49,10 +51,72 @@ public class HiveInstance {
   }
 
   public void awaitRunning() {
+    awaitState(InstanceStateName.Running);
+  }
+
+  public void awaitState(InstanceStateName state) {
+    awaitState(state, Duration.ofMinutes(10));
+  }
+
+  public void awaitState(InstanceStateName state, Duration timeout) {
     Await.every(Duration.ofSeconds(1))
-        .timeout(Duration.ofMinutes(10))
-        .verbose("Instance Running")
-        .await(() -> queen.getInstance(getId()).isRunning());
+        .timeout(timeout)
+        .verbose("Instance " + state)
+        .await(() -> queen.getInstance(getId()).getState() == state);
+  }
+
+  public void awaitIp() {
+    Await.every(Duration.ofSeconds(2))
+        .timeout(Duration.ofMinutes(20))
+        .verbose("Instance IP")
+        .await(() -> {
+          return queen.getInstanceOptional(getId())
+              .compute(instance -> !instance.getIp().isEmpty(), false);
+        });
+  }
+
+  public void reboot() {
+    queen.getEC2().rebootInstances(new RebootInstancesRequest(XList.of(getId())));
+
+    try {
+      Await.every(Duration.ofSeconds(1))
+          .timeout(Duration.ofSeconds(5))
+          .verbose("Instance Shutting Down")
+          .await(() -> !queen.getInstance(getId()).isRunning());
+    } catch (Exception e) {
+      throw new RuntimeException("There was a problem shutting this instance down!");
+    }
+  }
+
+  public void hardReboot() {
+    stop();
+    start();
+    awaitIp();
+  }
+
+  /**
+   * Routes the given domain to this instance.
+   */
+  public void routeDomainToInstance(String domain) {
+    queen.createARecord(domain, getIp(), false);
+  }
+
+  /**
+   * Attempts to stop normally. If the instance isn't stopped after 1 minute, this will attempt to force-stop the
+   * instance.
+   */
+  public void stop() {
+    queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())));
+    try {
+      awaitState(InstanceStateName.Stopped, Duration.ofMinutes(1));
+    } catch (AwaitTimeoutException e) {
+      queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())).withForce(true));
+      awaitState(InstanceStateName.Stopped, Duration.ofMinutes(9));
+    }
+  }
+
+  public void start() {
+    queen.getEC2().startInstances(new StartInstancesRequest(XList.of(getId())));
   }
 
   public void changeInstanceType(InstanceType type) {
