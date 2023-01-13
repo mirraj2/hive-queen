@@ -14,10 +14,12 @@ import com.amazonaws.services.ec2.model.RebootInstancesRequest;
 import com.amazonaws.services.ec2.model.StartInstancesRequest;
 import com.amazonaws.services.ec2.model.StopInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
+import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 
 import ox.Await;
 import ox.Await.AwaitTimeoutException;
 import ox.Json;
+import ox.Log;
 import ox.x.XList;
 
 public class HiveInstance {
@@ -83,7 +85,7 @@ public class HiveInstance {
           .timeout(Duration.ofSeconds(5))
           .verbose("Instance Shutting Down")
           .await(() -> !queen.getInstance(getId()).isRunning());
-    } catch (Exception e) {
+    } catch (AwaitTimeoutException e) {
       throw new RuntimeException("There was a problem shutting this instance down!");
     }
   }
@@ -110,6 +112,7 @@ public class HiveInstance {
     try {
       awaitState(InstanceStateName.Stopped, Duration.ofMinutes(1));
     } catch (AwaitTimeoutException e) {
+      Log.debug("Stopping with force.");
       queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())).withForce(true));
       awaitState(InstanceStateName.Stopped, Duration.ofMinutes(9));
     }
@@ -119,15 +122,21 @@ public class HiveInstance {
     queen.getEC2().startInstances(new StartInstancesRequest(XList.of(getId())));
   }
 
+  public void terminate() {
+    queen.getEC2().terminateInstances(new TerminateInstancesRequest(XList.of(getId())));
+  }
+
   public void changeInstanceType(InstanceType type) {
-    queen.getEC2().stopInstances(new StopInstancesRequest(XList.of(getId())));
-    Await.every(Duration.ofSeconds(2)).timeout(Duration.ofMinutes(5))
-        .await(() -> queen.getInstance(getId()).isStopped());
+    if (getType() == type) {
+      return;
+    }
+    stop();
     queen.getEC2().modifyInstanceAttribute(
         new ModifyInstanceAttributeRequest()
             .withInstanceId(getId())
             .withInstanceType(type.toString()));
     queen.getEC2().startInstances(new StartInstancesRequest(XList.of(getId())));
+    awaitIp();
   }
 
   public InstanceStateName getState() {

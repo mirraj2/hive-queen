@@ -2,7 +2,6 @@ package queen;
 
 import static com.google.common.base.Preconditions.checkState;
 import static ox.util.Utils.checkNotEmpty;
-import static ox.util.Utils.count;
 import static ox.util.Utils.format;
 import static ox.util.Utils.normalize;
 import static ox.util.Utils.only;
@@ -365,16 +364,26 @@ public class HiveQueen {
     return ec2;
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     Config config = Config.load("ender");
+
     HiveQueen queen = new HiveQueen(config);
+
+    queen.createDNSRecord("jason.ender.com", queen.getInstanceByName("ender.com [node 3]").getIp(), true);
 
     // queen.getInstanceByName("qa5.ender.com").reboot();
 
-    count(1, 20).concurrent().forEach(i -> {
-      String domain = "qa" + i + ".ender.com";
-      queen.createDNSRecord(domain, queen.getInstanceByName(domain).getIp(), true);
-    });
+    // count(1, 20).concurrent().forEach(i -> {
+    // String domain = "qa" + i + ".ender.com";
+    // HiveInstance instance = queen.getInstanceByName(domain);
+    // instance.changeInstanceType(InstanceType.T3Small);
+    // queen.createDNSRecord(domain, queen.getInstanceByName(domain).getIp(), true);
+    // });
+
+    // count(1, 20).concurrent().forEach(i -> {
+    // String domain = "qa" + i + ".ender.com";
+    // queen.createDNSRecord(domain, queen.getInstanceByName(domain).getIp(), true);
+    // });
 
     Log.debug("Done.");
   }

@@ -17,7 +17,7 @@
 	<classpathentry kind="lib" path="lib/aws/jackson-databind-2.6.6.jar"/>
 	<classpathentry kind="lib" path="lib/aws/joda-time-2.8.1.jar"/>
 	<classpathentry kind="lib" path="lib/aws/aws-java-sdk-route53-1.12.321.jar" sourcepath="lib/open-src/aws-java-sdk-route53-1.12.321-sources.jar"/>
-	<classpathentry kind="lib" path="lib/aws/aws-java-sdk-ec2-1.12.322.jar" sourcepath="lib/open-src/aws-java-sdk-ec2-1.11.803-sources.jar"/>
+	<classpathentry exported="true" kind="lib" path="lib/aws/aws-java-sdk-ec2-1.12.322.jar" sourcepath="lib/open-src/aws-java-sdk-ec2-1.11.803-sources.jar"/>
 	<classpathentry kind="lib" path="lib/aws/aws-java-sdk-elasticloadbalancingv2-1.12.351.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/ox"/>
 	<classpathentry kind="output" path="bin"/>
