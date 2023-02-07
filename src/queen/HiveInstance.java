@@ -42,6 +42,10 @@ public class HiveInstance {
     return normalize(instance.getPublicIpAddress());
   }
 
+  public String getInternalIp() {
+    return normalize(instance.getPrivateIpAddress());
+  }
+
   public boolean isTerminated() {
     return getState() == InstanceStateName.Terminated;
   }
