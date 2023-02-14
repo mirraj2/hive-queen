@@ -4,10 +4,8 @@ import static ox.util.Utils.normalize;
 
 import java.time.Duration;
 
-import com.amazonaws.services.ec2.model.AssociateIamInstanceProfileRequest;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeleteTagsRequest;
-import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceStateName;
 import com.amazonaws.services.ec2.model.InstanceType;
@@ -165,14 +163,6 @@ public class HiveInstance {
               .withTags(tag));
       instance.withTags(tag);
     }
-    return this;
-  }
-
-  public HiveInstance withIAMRole(String instanceId, String instanceProfileArn) {
-    queen.getEC2().associateIamInstanceProfile(
-        new AssociateIamInstanceProfileRequest()
-            .withInstanceId(instanceId)
-            .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(instanceProfileArn)));
     return this;
   }
 

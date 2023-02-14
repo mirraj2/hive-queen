@@ -23,6 +23,7 @@ import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeSubnetsRequest;
 import com.amazonaws.services.ec2.model.DescribeVpcsRequest;
 import com.amazonaws.services.ec2.model.Filter;
+import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.Reservation;
@@ -148,7 +149,8 @@ public class HiveQueen {
     if (useExistingImageIfAvailable) {
       XOptional<HiveImage> existingImage = getImageByName(existingInstance.getId());
       if (existingImage.isPresent()) {
-        return launchInstanceFromImage(cloneName, existingInstance.getType(), existingImage.get().getId(), false);
+        return launchInstanceFromImage(cloneName, existingInstance.getType(), existingImage.get().getId(),
+            XOptional.empty(), false);
       }
     }
 
@@ -165,18 +167,24 @@ public class HiveQueen {
         .verbose("Image Creation")
         .await(() -> getImage(imageId).isAvailable());
 
-    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId, false);
+    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId, XOptional.empty(), false);
   }
 
-  public HiveInstance launchInstanceFromImage(String instanceName, InstanceType type, String imageId, boolean awaitIp) {
+  public HiveInstance launchInstanceFromImage(String instanceName, InstanceType type, String imageId,
+      XOptional<String> iamRole, boolean awaitIp) {
     imageId = checkNotEmpty(normalize(imageId));
 
     Log.debug("Launching instance.");
-    Reservation reservation = ec2.runInstances(new RunInstancesRequest()
+    RunInstancesRequest request = new RunInstancesRequest()
         .withMinCount(1).withMaxCount(1)
         .withInstanceType(type)
         .withImageId(imageId)
-        .withMonitoring(true)).getReservation();
+        .withMonitoring(true);
+    iamRole.ifPresent(s -> {
+      request.withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(iamRole.get()));
+    });
+
+    Reservation reservation = ec2.runInstances(request).getReservation();
 
     HiveInstance ret = new HiveInstance(this, only(reservation.getInstances()));
     Log.debug("New Instance Created!  id = " + ret.getId());
@@ -369,7 +377,15 @@ public class HiveQueen {
 
     HiveQueen queen = new HiveQueen(config);
 
-    queen.createDNSRecord("jason.ender.com", queen.getInstanceByName("ender.com [node 3]").getIp(), true);
+    for (String key : XList.of("qa21.ender.com")) {
+      HiveInstance instance = queen.getInstanceByName(key);
+      instance.routeDomainToInstance(key);
+    }
+    // instance.re
+    // instance.changeInstanceType(InstanceType.T3Small);
+    // instance.routeDomainToInstance("chat.ender.com");
+
+    // queen.createDNSRecord("jason.ender.com", queen.getInstanceByName("ender.com [node 3]").getIp(), true);
 
     // queen.getInstanceByName("qa5.ender.com").reboot();
 
