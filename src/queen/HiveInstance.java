@@ -1,5 +1,6 @@
 package queen;
 
+import static ox.util.Utils.attempt;
 import static ox.util.Utils.normalize;
 
 import java.time.Duration;
@@ -157,10 +158,12 @@ public class HiveInstance {
       removeTag(key);
     } else {
       Tag tag = new Tag(key, s);
-      queen.getEC2()
-          .createTags(new CreateTagsRequest()
-              .withResources(instance.getInstanceId())
-              .withTags(tag));
+      attempt(() -> {
+        queen.getEC2().createTags(new CreateTagsRequest()
+            .withResources(instance.getInstanceId())
+            .withTags(tag));
+        return true;
+      }, 10, 1000);
       instance.withTags(tag);
     }
     return this;

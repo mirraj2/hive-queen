@@ -150,7 +150,7 @@ public class HiveQueen {
       XOptional<HiveImage> existingImage = getImageByName(existingInstance.getId());
       if (existingImage.isPresent()) {
         return launchInstanceFromImage(cloneName, existingInstance.getType(), existingImage.get().getId(),
-            XOptional.empty(), false);
+            XOptional.empty());
       }
     }
 
@@ -167,11 +167,11 @@ public class HiveQueen {
         .verbose("Image Creation")
         .await(() -> getImage(imageId).isAvailable());
 
-    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId, XOptional.empty(), false);
+    return launchInstanceFromImage(cloneName, existingInstance.getType(), imageId, XOptional.empty());
   }
 
   public HiveInstance launchInstanceFromImage(String instanceName, InstanceType type, String imageId,
-      XOptional<String> iamRole, boolean awaitIp) {
+      XOptional<String> iamRole) {
     imageId = checkNotEmpty(normalize(imageId));
 
     Log.debug("Launching instance.");
@@ -189,18 +189,15 @@ public class HiveQueen {
     HiveInstance ret = new HiveInstance(this, only(reservation.getInstances()));
     Log.debug("New Instance Created!  id = " + ret.getId());
 
+    // TODO can sometimes run into "The instance ID 'i-xyz' does not exist"
+    // for now we'll add a hacky sleep
+    sleep(2000);
+
+    ret.awaitIp();
+
     ret.withTag("Name", instanceName);
 
-    if (awaitIp) {
-      // TODO can sometimes run into "The instance ID 'i-xyz' does not exist"
-      // for now we'll add a hacky sleep
-      sleep(2000);
-
-      ret.awaitIp();
-      return getInstance(ret.getId());
-    } else {
-      return ret;
-    }
+    return getInstance(ret.getId());
   }
 
   public HiveImage getImage(String imageId) {
@@ -377,10 +374,12 @@ public class HiveQueen {
 
     HiveQueen queen = new HiveQueen(config);
 
-    for (String key : XList.of("qa21.ender.com")) {
-      HiveInstance instance = queen.getInstanceByName(key);
-      instance.routeDomainToInstance(key);
-    }
+    queen.getInstance("i-02329771198210821").withTag("Name", "test123");
+
+    // for (String key : XList.of("qa21.ender.com")) {
+    // HiveInstance instance = queen.getInstanceByName(key);
+    // instance.routeDomainToInstance(key);
+    // }
     // instance.re
     // instance.changeInstanceType(InstanceType.T3Small);
     // instance.routeDomainToInstance("chat.ender.com");
