@@ -361,12 +361,23 @@ public class HiveQueen {
         .filter(s -> s.getVpcId().equals(vpcId));
   }
 
-  public XList<LoadBalancer> getLoadBalancers() {
-    return XList.create(loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest()).getLoadBalancers());
+  public HiveLoadBalancer getLoadBalancer(String name) {
+    List<LoadBalancer> loadBalancers = loadBalancing
+        .describeLoadBalancers(new DescribeLoadBalancersRequest().withNames(name)).getLoadBalancers();
+    return new HiveLoadBalancer(this, loadBalancers.get(0));
+  }
+
+  public XList<HiveLoadBalancer> getLoadBalancers() {
+    return XList.create(loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest()).getLoadBalancers())
+        .map(b -> new HiveLoadBalancer(this, b));
   }
 
   protected AmazonEC2 getEC2() {
     return ec2;
+  }
+
+  public AmazonElasticLoadBalancing getLoadBalancing() {
+    return loadBalancing;
   }
 
   public static void main(String[] args) throws Exception {
@@ -374,7 +385,9 @@ public class HiveQueen {
 
     HiveQueen queen = new HiveQueen(config);
 
-    queen.getInstance("i-02329771198210821").withTag("Name", "test123");
+    queen.getLoadBalancer("api-ender-com").getTargetsWithHealth().log();
+
+    // queen.getInstance("i-02329771198210821").withTag("Name", "test123");
 
     // for (String key : XList.of("qa21.ender.com")) {
     // HiveInstance instance = queen.getInstanceByName(key);

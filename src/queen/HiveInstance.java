@@ -200,4 +200,17 @@ public class HiveInstance {
     return name.isEmpty() ? getId() : name;
   }
 
+  @Override
+  public int hashCode() {
+    return getId().hashCode();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof HiveInstance)) {
+      return false;
+    }
+    return getId().equals(((HiveInstance) obj).getId());
+  }
+
 }
