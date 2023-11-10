@@ -39,6 +39,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.CreateLoadBalancerReq
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateLoadBalancerResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupResult;
+import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.ForwardActionConfig;
 import com.amazonaws.services.elasticloadbalancingv2.model.IpAddressType;
@@ -345,6 +346,12 @@ public class HiveQueen {
 
   public void registerTargets(String targetGroupId, XList<String> instanceIds) {
     loadBalancing.registerTargets(new RegisterTargetsRequest()
+        .withTargetGroupArn(targetGroupId)
+        .withTargets(instanceIds.map(instanceId -> new TargetDescription().withId(instanceId).withPort(443))));
+  }
+
+  public void deregisterTargets(String targetGroupId, XList<String> instanceIds) {
+    loadBalancing.deregisterTargets(new DeregisterTargetsRequest()
         .withTargetGroupArn(targetGroupId)
         .withTargets(instanceIds.map(instanceId -> new TargetDescription().withId(instanceId).withPort(443))));
   }
