@@ -41,6 +41,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupRequ
 import com.amazonaws.services.elasticloadbalancingv2.model.CreateTargetGroupResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetGroupsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.ForwardActionConfig;
 import com.amazonaws.services.elasticloadbalancingv2.model.IpAddressType;
 import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancer;
@@ -50,6 +51,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.RedirectActionConfig;
 import com.amazonaws.services.elasticloadbalancingv2.model.RedirectActionStatusCodeEnum;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroup;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroupTuple;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetTypeEnum;
 import com.amazonaws.services.route53.AmazonRoute53;
@@ -286,6 +288,16 @@ public class HiveQueen {
       return domain.substring(0, domain.length() - 1);
     }
     return domain;
+  }
+
+  public String getTargetGroup(String name) {
+    List<TargetGroup> targetGroups = loadBalancing
+        .describeTargetGroups(new DescribeTargetGroupsRequest().withNames(name)).getTargetGroups();
+    if (targetGroups.isEmpty()) {
+      return "";
+    } else {
+      return targetGroups.get(0).getTargetGroupArn();
+    }
   }
 
   public String createTargetGroup(String name, String vpcId, String healthCheckPath) {
