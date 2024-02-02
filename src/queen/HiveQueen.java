@@ -253,6 +253,18 @@ public class HiveQueen {
     }
   }
 
+  public boolean doesDNSRecordExist(String key) {
+    HostedZone zone = getHostedZoneByName(getDomain(key));
+
+    ListResourceRecordSetsRequest listRequest = new ListResourceRecordSetsRequest(zone.getId())
+        .withStartRecordName(key).withStartRecordType(RRType.A).withMaxItems("1");
+    return XList.create(route53.listResourceRecordSets(listRequest).getResourceRecordSets())
+        .map(ResourceRecordSet::getName).log()
+        .any(name -> {
+          return normalizeDomain(name).equals(key);
+        });
+  }
+
   public void deleteDNSRecord(String key) {
     Log.debug(format("Deleting dns record: {0}", key));
 
@@ -404,7 +416,7 @@ public class HiveQueen {
 
     HiveQueen queen = new HiveQueen(config);
 
-    queen.getLoadBalancer("api-ender-com").getTargetsWithHealth().log();
+    // queen.getLoadBalancer("api-ender-com").getTargetsWithHealth().log();
 
     // queen.getInstance("i-02329771198210821").withTag("Name", "test123");
 
