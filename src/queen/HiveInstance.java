@@ -213,4 +213,8 @@ public class HiveInstance {
     return getId().equals(((HiveInstance) obj).getId());
   }
 
+  public HiveQueen getQueen() {
+    return queen;
+  }
+
 }
