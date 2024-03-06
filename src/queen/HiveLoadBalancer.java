@@ -68,7 +68,7 @@ public class HiveLoadBalancer {
         .registerTargets(new RegisterTargetsRequest().withTargetGroupArn(getTargetGroup().getTargetGroupArn())
             .withTargets(new TargetDescription().withId(instance.getId())));
     if (awaitHealthy) {
-      Await.every(Duration.ofSeconds(2)).verbose("Registering taget").timeout(Duration.ofHours(1)).await(() -> {
+      Await.every(Duration.ofSeconds(2)).verbose("Registering target").timeout(Duration.ofHours(1)).await(() -> {
         return getTargetHealth(instance) == TargetHealthStateEnum.Healthy;
       });
     }
